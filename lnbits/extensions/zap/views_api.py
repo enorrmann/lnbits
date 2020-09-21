@@ -5,34 +5,38 @@
 # import json
 # import requests
 
-from flask import jsonify
+from flask import jsonify, request
 from http import HTTPStatus
 
 from lnbits.extensions.zap import zap_ext
-
+from lnbits.core.crud import get_wallet_for_key, get_wallet_payments
 
 # add your endpoints here
 
+# Wallet ID: a9ed5d5f2f2548c3b2ab97de0c02da1e
+test_wallet_id = 'a9ed5d5f2f2548c3b2ab97de0c02da1e'
 
-@zap_ext.route("/api/v1/tools", methods=["GET"])
-def api_example():
-    """Try to add descriptions for others."""
-    tools = [
-        {
-            "name": "Flask",
-            "url": "https://flask.palletsprojects.com/",
-            "language": "Python",
-        },
-        {
-            "name": "Vue.js",
-            "url": "https://vuejs.org/",
-            "language": "JavaScript",
-        },
-        {
-            "name": "Quasar Framework",
-            "url": "https://quasar.dev/",
-            "language": "JavaScript",
-        },
-    ]
+@zap_ext.route("/api/v1/channelbalance", methods=["POST"])
+def channel_balance():
+    api_key = request.headers['X-Api-Key']
+    wall = get_wallet_for_key(api_key)
+    balance = int(wall.balance_msat/1000)
+    response = {
+        'balance': balance,
+        'pending_open_balance': 0
+    }
+    return jsonify(response), HTTPStatus.OK
 
-    return jsonify(tools), HTTPStatus.OK
+
+@zap_ext.route("/api/v1/invoices", methods=["POST"])
+def invoices():
+    api_key = request.headers['X-Api-Key']
+    wall = get_wallet_for_key(api_key)
+    invoices = get_wallet_payments(
+        wall.id,
+        complete=True,
+        pending=True,
+        outgoing=False,
+        incoming=True
+    )
+    return jsonify(invoices), HTTPStatus.OK

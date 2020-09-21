@@ -1,51 +1,77 @@
-from lnbits import app
+from lnbits import bolt11
+import time
+import codecs
 import grpc
+import json
 
 from .rpc import rpc_pb2 as ln
 from .rpc import rpc_pb2_grpc as lnrpc
-from lnbits.core.crud import get_wallet
-
-from google.protobuf.json_format import MessageToJson
-
+import requests
 
 class LNBitsLightningServicer(lnrpc.LightningServicer):
-    def WalletBalance(self, request, context):
-        #Wallet ID: a9ed5d5f2f2548c3b2ab97de0c02da1e
-        #wall = get_wallet("a9ed5d5f2f2548c3b2ab97de0c02da1e")
-        #print(wall)
-    
-        return ln.WalletBalanceResponse(total_balance=12, confirmed_balance=12, unconfirmed_balance=121233)
+    base_url = 'http://localhost:5000/zap/api/v1/'
+    add_invoice_url = 'http://localhost:5000/api/v1/payments'
 
-    def AddInvoice(self, request, context):
-        """lncli: `addinvoice`
-        AddInvoice attempts to add a new invoice to the invoice database. Any
-        duplicated invoices are rejected, therefore all invoices *must* have a
-        unique payment preimage.
-        """
-        # context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 1")
-        #context.set_details('Method not 1!')
+    
+    def DebugContext(self,request,context):
+        print("REQUEST")
         print(request)
-        #raise NotImplementedError('Method not 2!')
-        return ln.AddInvoiceResponse(payment_request="hola")
+        print("CONTEXT")
+        for key, value in context.invocation_metadata():
+            print('Received initial metadata: key=%s value=%s' % (key, value))
+
+
+
+    def DoPostWithApiKey(self,url,data,context):
+        api_key = self.GetApiKeyId(context)
+        print("apiki "+api_key) 
+        headers = {
+            'X-Api-Key': api_key,
+            'Content-Type': 'application/json'
+        }
+        json_response = requests.post(url, json=data, headers=headers)
+        resp = json.loads(json_response.text)
+        return resp
+
+
+    def GetApiKeyId(self,context):
+        meta = dict(context.invocation_metadata())
+        maca = meta["macaroon"]
+        macaded = codecs.decode(maca, "hex").decode('utf-8')
+        print (macaded)
+        return macaded
+
+    def WalletBalance(self, request, context):
+
+        # json_response = requests.post(self.base_url+'walletbalance')
+        # resp = json.loads(json_response.text)
+        return ln.WalletBalanceResponse(total_balance=0, confirmed_balance=0, unconfirmed_balance=0)
+
+        """
+        return ln.WalletBalanceResponse(
+            total_balance=resp["total_balance"],
+            confirmed_balance=resp["confirmed_balance"],
+            unconfirmed_balance=resp["unconfirmed_balance"])
+        """
 
     def ChannelBalance(self, request, context):
         """lncli: `channelbalance`
         ChannelBalance returns the total funds available across all open channels
         in satoshis.
         """
-        print("ChannelBalance")
-        return ln.ChannelBalanceResponse(balance=111, pending_open_balance=222)
+        print("ChannelBalance 11")
+        resp = self.DoPostWithApiKey(self.base_url+'channelbalance',{},context)
+        print("ChannelBalance 22")
+        print(resp)
+
+        return ln.ChannelBalanceResponse(
+            balance=resp["balance"],
+            pending_open_balance=0
+        )
 
     def GetTransactions(self, request, context):
-        """lncli: `listchaintxns`
-        GetTransactions returns a list describing all the known transactions
-        relevant to the wallet.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 3")
-        context.set_details('Method not 5!')
-        raise NotImplementedError('Method not 6!')
+        print("XXXX GetTransactions")
+        return ln.TransactionDetails(transactions=[])
 
     def EstimateFee(self, request, context):
         """lncli: `estimatefee`
@@ -165,13 +191,8 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         raise NotImplementedError('Method not 26!')
 
     def ListPeers(self, request, context):
-        """lncli: `listpeers`
-        ListPeers returns a verbose listing of all currently active peers.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 14")
-        context.set_details('Method not 27!')
-        raise NotImplementedError('Method not 28!')
+        print("XXXX ListPeers")
+        return ln.ListPeersResponse(peers=[])
 
     def SubscribePeerEvents(self, request, context):
         """
@@ -185,32 +206,23 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         raise NotImplementedError('Method not 30!')
 
     def GetInfo(self, request, context):
-        """lncli: `getinfo`
-        GetInfo returns general information concerning the lightning node including
-        it's identity pubkey, alias, the chains it is connected to, and information
-        concerning the number of open+pending channels.
-        """
-        # context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("GetInfo 16")
-        # context.set_details('Method not 31!') zap call 1
-        
-        chain = ln.Chain(chain="bitcoin",network="mainnet")
+        chain = ln.Chain(chain="bitcoin", network="mainnet")
 
         return ln.GetInfoResponse(
-            version="LnBits11",
+            version="0.9",
             commit_hash="assd8sa768d67",
             identity_pubkey="12987612931k2j3bk12",
             alias="sd78sd67f87ds",
             num_pending_channels=0,
-            num_active_channels=0,
+            num_active_channels=1,
             num_inactive_channels=0,
             num_peers=0,
             block_height=6,
             block_hash="8a8s7sa87687",
             best_header_timestamp=13,
             synced_to_chain=1,
-            synced_to_graph=0, 
-            chains = [chain]
+            synced_to_graph=0,
+            chains=[chain]
         )
 
     def GetRecoveryInfo(self, request, context):
@@ -225,78 +237,27 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         raise NotImplementedError('Method not 34!')
 
     def PendingChannels(self, request, context):
-        """TODO(roasbeef): merge with below with bool?
-
-        lncli: `pendingchannels`
-        PendingChannels returns a list of all the channels that are currently
-        considered "pending". A channel is pending if it has finished the funding
-        workflow and is waiting for confirmations for the funding txn, or is in the
-        process of closure, either initiated cooperatively or non-cooperatively.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 18")
-        context.set_details('Method not 35!')
-        raise NotImplementedError('Method not 36!')
+        print("XXXX PendingChannels")
+        return ln.ListChannelsResponse(channels=[])
 
     def ListChannels(self, request, context):
-        """lncli: `listchannels`
-        ListChannels returns a description of all the open channels that this node
-        is a participant in.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 19")
-        context.set_details('Method not 37!')
-        raise NotImplementedError('Method not 38!')
+        print("XXXX ListChannels")
+        fakeChan = ln.Channel(
+            active=True,
+            remote_pubkey='lnbits',
+            capacity=10000,
+            local_balance=5000,
+            remote_balance=5000,
+        )
+        return ln.ListChannelsResponse(channels=[fakeChan])
 
     def SubscribeChannelEvents(self, request, context):
-        """
-        SubscribeChannelEvents creates a uni-directional stream from the server to
-        the client in which any updates relevant to the state of the channels are
-        sent over. Events include new active channels, inactive channels, and closed
-        channels.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 20")
-        context.set_details('Method not 39!')
+        print("XXXX SubscribeChannelEvents")
         raise NotImplementedError('Method not 40!')
 
     def ClosedChannels(self, request, context):
-        """lncli: `closedchannels`
-        ClosedChannels returns a description of all the closed channels that
-        this node was a participant in.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 21")
-        context.set_details('Method not 41!')
-        raise NotImplementedError('Method not 42!')
-
-    def OpenChannelSync(self, request, context):
-        """
-        OpenChannelSync is a synchronous version of the OpenChannel RPC call. This
-        call is meant to be consumed by clients to the REST proxy. As with all
-        other sync calls, all byte slices are intended to be populated as hex
-        encoded strings.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 22")
-        context.set_details('Method not 43!')
-        raise NotImplementedError('Method not 44!')
-
-    def OpenChannel(self, request, context):
-        """lncli: `openchannel`
-        OpenChannel attempts to open a singly funded channel specified in the
-        request to a remote peer. Users are able to specify a target number of
-        blocks that the funding transaction should be confirmed in, or a manual fee
-        rate to us for the funding transaction. If neither are specified, then a
-        lax block confirmation target is used. Each OpenStatusUpdate will return
-        the pending channel ID of the in-progress channel. Depending on the
-        arguments specified in the OpenChannelRequest, this pending channel ID can
-        then be used to manually progress the channel funding flow.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 23")
-        context.set_details('Method not 45!')
-        raise NotImplementedError('Method not 46!')
+        print("XXXX ClosedChannels")
+        return ln.ListChannelsResponse(channels=[])
 
     def FundingStateStep(self, request, context):
         """
@@ -370,16 +331,16 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         raise NotImplementedError('Method not 56!')
 
     def SendPaymentSync(self, request, context):
-        """
-        SendPaymentSync is the synchronous non-streaming version of SendPayment.
-        This RPC is intended to be consumed by clients of the REST proxy.
-        Additionally, this RPC expects the destination's public key and the payment
-        hash (if any) to be encoded as hex strings.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 29")
-        context.set_details('Method not 57!')
-        raise NotImplementedError('Method not 58!')
+        print("XXXX SendPaymentSync")
+        self.DebugContext(request,context)
+        payment_request = request.payment_request
+        params = {
+            'out': True,
+            'bolt11': payment_request
+        }
+        resp = self.DoPostWithApiKey(self.add_invoice_url, params, context)
+        payment_hash = resp["payment_hash"]
+        return ln.SendResponse(payment_hash=bytes.fromhex(payment_hash))
 
     def SendToRoute(self, request_iterator, context):
         """lncli: `sendtoroute`
@@ -405,30 +366,82 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         raise NotImplementedError('Method not 62!')
 
     def AddInvoice(self, request, context):
-        """lncli: `addinvoice`
-        AddInvoice attempts to add a new invoice to the invoice database. Any
-        duplicated invoices are rejected, therefore all invoices *must* have a
-        unique payment preimage.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 32")
-        context.set_details('Method not 63!')
-        raise NotImplementedError('Method not 64!')
+        print("s"+request.memo+"s")
+        memo = request.memo
+        if not memo:
+            memo = "new request"
+        params = {
+            'out': False,
+            'amount': request.value,
+            'memo': memo
+        }
+        invoices = self.GetInvoices(context)
+        add_index = len(invoices)+1
+        print("AddInvoice")
+        test_url = "https://ptsv2.com/t/qu294-1600515698/post"
+        resp = self.DoPostWithApiKey(self.add_invoice_url, params, context)
+        #resp = self.DoPostWithApiKey(test_url, params, context)
+        payment_request = resp["payment_request"]
+        decoded = bolt11.decode(payment_request)
+        payment_hash = decoded.payment_hash
+        rhash = bytes.fromhex(payment_hash)
+
+        return ln.AddInvoiceResponse(
+            # add_index=resp["checking_id"], no tengo index en la response de lnbits
+            # add_index=int(time.time()),
+            add_index=add_index,
+            r_hash=rhash,
+            payment_request=payment_request
+        )
+
+    def GetInvoiceFromDbRecord(self, invoice, index):
+        payment_request = invoice[6]
+        pending = invoice[1]
+
+        # IF IT IS PAID (NOT PENDING)
+        if (pending == 0):
+            settled = True
+            state = ln.Invoice.InvoiceState.SETTLED
+            amt_paid_sat = int(invoice[2]/1000)
+            settle_date = invoice[5]
+        else:
+            settled = False
+            state = ln.Invoice.InvoiceState.OPEN
+            amt_paid_sat = 0
+            settle_date = None
+
+        decoded = bolt11.decode(payment_request)
+        payment_hash = decoded.payment_hash
+        rhash = bytes.fromhex(payment_hash)
+
+        return ln.Invoice(
+            value=int(invoice[2]/1000),
+            memo=invoice[4],
+            creation_date=invoice[5],
+            payment_request=invoice[6],
+            r_hash=rhash,
+            add_index=index,
+            expiry=decoded.expiry,
+            state=state,
+            settled=settled,
+            amt_paid_sat=amt_paid_sat,
+            settle_date=settle_date
+        )
+
+    def GetInvoices(self,context):
+        invoices_response = self.DoPostWithApiKey(self.base_url+'invoices',{},context)
+        invoices = []
+        idx = 0
+        for db_invoice in invoices_response:
+            idx = idx + 1
+            invoice = self.GetInvoiceFromDbRecord(db_invoice, idx)
+            invoices.append(invoice)
+        return invoices
 
     def ListInvoices(self, request, context):
-        """lncli: `listinvoices`
-        ListInvoices returns a list of all the invoices currently stored within the
-        database. Any active debug invoices are ignored. It has full support for
-        paginated responses, allowing users to query for specific invoices through
-        their add_index. This can be done by using either the first_index_offset or
-        last_index_offset fields included in the response as the index_offset of the
-        next request. By default, the first 100 invoices created will be returned.
-        Backwards pagination is also supported through the Reversed flag.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 33")
-        context.set_details('Method not 65!')
-        raise NotImplementedError('Method not 66!')
+        print("XXXX ListInvoices")
+        invoices = self.GetInvoices(context)
+        return ln.ListInvoiceResponse(invoices=invoices)
 
     def LookupInvoice(self, request, context):
         """lncli: `lookupinvoice`
@@ -442,41 +455,45 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         raise NotImplementedError('Method not 68!')
 
     def SubscribeInvoices(self, request, context):
-        """
-        SubscribeInvoices returns a uni-directional stream (server -> client) for
-        notifying the client of newly added/settled invoices. The caller can
-        optionally specify the add_index and/or the settle_index. If the add_index
-        is specified, then we'll first start by sending add invoice events for all
-        invoices with an add_index greater than the specified value. If the
-        settle_index is specified, the next, we'll send out all settle events for
-        invoices with a settle_index greater than the specified value. One or both
-        of these fields can be set. If no fields are set, then we'll only send out
-        the latest add/settle events.
-        """
+        while 1:
+            time.sleep(5)
+            invoices = self.GetInvoices
+            for invoice in invoices:
+                yield invoice
+
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         print("SubscribeInvoices 35")
         context.set_details('Method not 69!')
         raise NotImplementedError('Method not 70!')
 
     def DecodePayReq(self, request, context):
-        """lncli: `decodepayreq`
-        DecodePayReq takes an encoded payment request string and attempts to decode
-        it, returning a full description of the conditions encoded within the
-        payment request.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 36")
-        context.set_details('Method not 71!')
-        raise NotImplementedError('Method not 72!')
+        decoded = bolt11.decode(request.pay_req)
+        try:
+            pr =  ln.PayReq(
+                timestamp = int(time.time()),
+                destination = decoded.payee,
+                payment_hash= decoded.payment_hash,
+                num_satoshis = int(decoded.amount_msat/1000),
+                expiry = decoded.expiry,
+                description = decoded.description,
+                description_hash = decoded.description_hash,
+                payment_addr = bytes.fromhex(decoded.payee),
+                features = {}
+            )
+        except Exception as inst:
+            print ("error")
+            print(inst)
+
+        print("pr")
+        print(pr)
+        return pr
 
     def ListPayments(self, request, context):
         """lncli: `listpayments`
         ListPayments returns a list of all outgoing payments.
         """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 37")
-        context.set_details('Method not 73!')
-        raise NotImplementedError('Method not 74!')
+        pmt = ln.Payment(value_sat=12)
+        return ln.ListPaymentsResponse(payments=[])
 
     def DeleteAllPayments(self, request, context):
         """
@@ -488,18 +505,8 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         raise NotImplementedError('Method not 76!')
 
     def DescribeGraph(self, request, context):
-        """lncli: `describegraph`
-        DescribeGraph returns a description of the latest graph state from the
-        point of view of the node. The graph information is partitioned into two
-        components: all the nodes/vertexes, and all the edges that connect the
-        vertexes themselves. As this is a directed graph, the edges also contain
-        the node directional specific routing policy which includes: the time lock
-        delta, fee information, etc.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 39")
-        context.set_details('Method not 77!')
-        raise NotImplementedError('Method not 78!')
+        print("XXXX DescribeGraph")
+        return ln.ChannelGraph(nodes=[], edges=[])
 
     def GetNodeMetrics(self, request, context):
         """lncli: `getnodemetrics`
@@ -546,10 +553,12 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         to the URL. Unfortunately this map type doesn't appear in the REST API
         documentation because of a bug in the grpc-gateway library.
         """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        print("XXXX 43")
-        context.set_details('Method not 85!')
-        raise NotImplementedError('Method not 86!')
+
+        print("XXXX QueryRoutes")
+        route = ln.Route(
+            total_fees_msat = 20
+        )
+        return ln.QueryRoutesResponse(routes=[route])
 
     def GetNetworkInfo(self, request, context):
         """lncli: `getnetworkinfo`
