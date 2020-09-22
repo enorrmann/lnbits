@@ -33,6 +33,17 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         resp = json.loads(json_response.text)
         return resp
 
+    def DoGetWithApiKey(self,url,context):
+        api_key = self.GetApiKeyId(context)
+        print("apiki "+api_key) 
+        headers = {
+            'X-Api-Key': api_key,
+            'Content-Type': 'application/json'
+        }
+        json_response = requests.get(url, headers=headers)
+        resp = json.loads(json_response.text)
+        return resp
+
 
     def GetApiKeyId(self,context):
         meta = dict(context.invocation_metadata())
@@ -140,10 +151,11 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         """lncli: `newaddress`
         NewAddress creates a new address under control of the local wallet.
         """
-        # context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         print("NewAddress 9")
         # context.set_details('Method not 17!') zap call 2
-        return ln.NewAddressResponse(address="dummy")
+        #return ln.NewAddressResponse(address="dummy")
+        raise NotImplementedError('Method not implemented!')
 
     def SignMessage(self, request, context):
         """lncli: `signmessage`
@@ -394,6 +406,23 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
             payment_request=payment_request
         )
 
+    def GetPaymentFromDbRecord(self, invoice, index):
+        try:
+            payment = ln.Payment(
+                value_sat=int(invoice[2]/1000),
+                value=int(invoice[2]/1000),
+                creation_date=invoice[5],
+                payment_hash=invoice[6],
+                payment_request=invoice[7],
+                payment_index = index+50
+            )
+            print ("payment")
+            print (payment)
+            return payment
+        except Exception as inst:
+            print ("error ***********")
+            print(inst)
+
     def GetInvoiceFromDbRecord(self, invoice, index):
         payment_request = invoice[6]
         pending = invoice[1]
@@ -429,14 +458,34 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
         )
 
     def GetInvoices(self,context):
-        invoices_response = self.DoPostWithApiKey(self.base_url+'invoices',{},context)
+        #invoices_response = self.DoPostWithApiKey(self.base_url+'invoices',{},context)
+        payments_response = self.DoGetWithApiKey(self.add_invoice_url,context)
         invoices = []
         idx = 0
-        for db_invoice in invoices_response:
+        for db_invoice in payments_response:
             idx = idx + 1
             invoice = self.GetInvoiceFromDbRecord(db_invoice, idx)
-            invoices.append(invoice)
+            # list includes payments and invoices (in and out)
+            if (invoice.value > 0 ):
+                invoices.append(invoice)
+            
         return invoices
+
+    def GetPayments(self,context):
+        #invoices_response = self.DoPostWithApiKey(self.base_url+'invoices',{},context)
+        payments_response = self.DoGetWithApiKey(self.add_invoice_url,context)
+        payments = []
+        idx = 0
+        for db_invoice in payments_response:
+            idx = idx + 1
+            invoice = self.GetPaymentFromDbRecord(db_invoice, idx)
+            # list includes payments and invoices (in and out)
+            if (invoice.value_sat < 0):
+                invoice.value_sat *= -1   #invert value
+                invoice.value *= -1
+                payments.append(invoice)
+            
+        return payments
 
     def ListInvoices(self, request, context):
         print("XXXX ListInvoices")
@@ -484,16 +533,18 @@ class LNBitsLightningServicer(lnrpc.LightningServicer):
             print ("error")
             print(inst)
 
-        print("pr")
-        print(pr)
         return pr
 
     def ListPayments(self, request, context):
         """lncli: `listpayments`
         ListPayments returns a list of all outgoing payments.
         """
-        pmt = ln.Payment(value_sat=12)
-        return ln.ListPaymentsResponse(payments=[])
+        print("XXXX ListPayments")
+
+        payments = self.GetPayments(context)
+        print (payments)
+
+        return ln.ListPaymentsResponse(payments=payments)
 
     def DeleteAllPayments(self, request, context):
         """
