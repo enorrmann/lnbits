@@ -26,17 +26,3 @@ def channel_balance():
         'pending_open_balance': 0
     }
     return jsonify(response), HTTPStatus.OK
-
-
-@zap_ext.route("/api/v1/invoices", methods=["POST"])
-def invoices():
-    api_key = request.headers['X-Api-Key']
-    wall = get_wallet_for_key(api_key)
-    invoices = get_wallet_payments(
-        wall.id,
-        complete=True,
-        pending=True,
-        outgoing=False,
-        incoming=True
-    )
-    return jsonify(invoices), HTTPStatus.OK
