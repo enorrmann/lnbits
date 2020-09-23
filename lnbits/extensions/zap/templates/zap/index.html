@@ -26,7 +26,7 @@
               color="grey"
               @click="copyText(selectedWallet[type])"
               class="text-center q-mb-md"
-              >Copy LndHub {{type}} URL</q-btn
+              >Copy LnConnect {{type}} URL</q-btn
             >
           </div>
         </q-card-section>
@@ -52,14 +52,12 @@
   <div class="col-12 col-md-4 col-lg-5 q-gutter-y-md">
     <q-card>
       <q-card-section>
-        <h6 class="text-subtitle1 q-my-none">LNbits LndHub extension</h6>
+        <h6 class="text-subtitle1 q-my-none">LNbits LnConnect extension</h6>
       </q-card-section>
       <q-card-section class="q-pa-none">
         <q-separator></q-separator>
         <q-list>
           {% include "zap/_instructions.html" %}
-          <q-separator></q-separator>
-          {% include "zap/_lndhub.html" %}
         </q-list>
       </q-card-section>
     </q-card>
@@ -77,8 +75,8 @@
         data: function () {
   var wallets = ({{ g.user.wallets | tojson }}).map(LNbits.map.wallet).map(wallet => ({
               label: wallet.name,
-              admin: `lndconnect://192.168.0.15:10009?cert={{ cert }}&macaroon=`+btoa(`${wallet.adminkey}`),
-              invoice: `lndconnect://192.168.0.15:10009?cert={{ cert }}&macaroon=`+btoa(`${wallet.inkey}`)
+              admin: `lndconnect://${location.host}:10009?cert={{ cert }}&macaroon=`+btoa(`${wallet.adminkey}`),
+              invoice: `lndconnect://${location.host}:10009?cert={{ cert }}&macaroon=`+btoa(`${wallet.inkey}`)
 
             }))
 
