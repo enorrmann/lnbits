@@ -13,7 +13,6 @@ from concurrent import futures
 from .rpc import rpc_pb2_grpc as lnrpc
 import os
 
-
 print("initialized")
 os.environ["GRPC_SSL_CIPHER_SUITES"] = 'HIGH+ECDSA'
 
